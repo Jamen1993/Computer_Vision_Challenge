@@ -1,0 +1,194 @@
+\section{Korrespondenzpunkte}
+\label{sec:korrespondenzpunkte}
+
+Um die virtuelle Ansicht synthetisieren zu können, muss zunächst die relative Pose der beiden realen Kameras zueinander bekannt sein (siehe Abb.~\ref{fig:geometrie_virtuelle_ansicht}). Aus der essenziellen Matrix der beiden Kameras, können die relative Rotation $R$ und die relative Translation $T$ bestimmt werden.
+
+Wir bestimmen die essenzielle Matrix mit dem linearen Achtpunktalgorithmus, der mindestens 8 Korrespondenzpunktpaare zwischen beiden Bildern benötigt. Der verwendete Prozess ist derselbe wie der im Kurs gezeigte, wobei die Details ein wenig abweichen.
+
+\subsection{Detektion von Merkmalen}
+Die Basis für die Bestimmung von Punktkorrespondenzen liefert die Detektion von Merkmalen in den beiden Bildern der realen Kameras. Die Merkmale sollen robust gegen Änderungen der Kamerapose sein, damit sie in beiden Kamerabildern gefunden werden. Wir verwenden zur Erkennung von Merkmalen den Harris"=Detektor.
+
+Als erstes wird der qualitative Bildgradient $F$ mit dem Sobelfilter bestimmt. Das Sobelfilter entspricht den beiden zweidimensionalen Faltungen
+\begin{align}
+	F_x &= S_x * I\\
+	F_y &= S_y * I
+\end{align}
+der Graustufenbilder bzw. Intensitäten $I$ mit den Filterkernen
+\begin{align}
+	S_x &=
+	\begin{bmatrix}
+	1 & 0 & -1\\
+	2 & 0 & -2\\
+	1 & 0 & -1	
+	\end{bmatrix}\\
+	S_y &= S_x^T.
+\end{align}
+Nach der Faltung enthalten $F_x$ und $F_y$ die horizontalen und vertikalen Bildgradienten jedes Pixels, wobei der Gradient von dunkel zu hell zeigt.
+
+Aus den Bildgradienten wird für jedes Pixel die Harrismatrix
+\begin{equation}
+	G = \begin{bmatrix}
+		I_x^2 & I_x \cdot I_y\\
+		I_x \cdot I_y & I_y^2
+	\end{bmatrix}
+\end{equation}
+gebildet. Die Eigenwerte der Harrismatrix können dahingehend interpretiert werden, dass sie das Ausmaß der Änderung des Bildinhalts in x-- und y"=Richtung beschreiben. Zwei kleine Eigenwerte bedeuten, dass das aktuell betrachtete Pixel auf einer gleichmäßigen Fläche liegt; ein großer und ein kleiner Eigenwert bedeuten, dass es eine Vorzugsrichtung gibt und sich das Pixel auf einer Kante befindet; zwei große Eigenwerte bedeuten, dass das betrachtete Pixel auf einer Ecke liegt und sich der Gradient in alle Richtungen deutlich ändert. Betrachtet man $G$ für jedes Pixel einzeln, ist das Ergebnis nicht sonderlich aussagekräftig, da die Änderung oft groß sein wird. Stattdessen wird mit einer weiteren zweidimensionalen Faltung mit einem Filterkern die Umgebung jedes Pixels in die Berechnung von $G$ mit einbezogen. Wir verwenden als Filterkern das aus der Signalverarbeitung bekannte Hammingfenster
+\begin{equation}
+	w(k, N) = 0.54 - 0.46 \cdot cos(\dfrac{2\pi}{N} \cdot k); k \in [0, N]
+\end{equation}
+mit der Länge $N$ und dem Index $k$, das zu einem zweidimensionalen, mittenbetonten Filterkern kombiniert
+\begin{equation}
+	W = \vec{w} \cdot \vec{w}^T
+\end{equation}
+und auf die Summe 1 normiert wird. Nach der zweidimensionalen Filterung sind die Eigenwerte der Harrismatrix aussagekräftiger, da sich Rauschen im Bild weniger stark auswirkt. Da die Eigenwertzerlegung für jedes Pixel sich recht aufwändig gestalten würde, wird stattdessen die Harrismetrik
+\begin{equation}
+	H = det(G) - k \cdot tr(G)^2
+\end{equation}
+angewandt. Durch den Vergleich von $H$ mit fest vorgegebenen Schwellwerten, kann eine Aussage über die Eigenwerte von $G$ für jedes Pixel getroffen werden. Sind beide Eigenwerte von $G$ groß ist auch $H$ groß und das betrachtete Pixel, und seine direkte Nachbarschaft, formen eine Ecke. Die Gewichtung der Spur von $G$ wird entsprechend \cite[S. 378]{Ma} zu $k = 0.03$ gewählt. Dieser Wert soll sich Erfahrungsgemäß bewährt haben.
+
+Die Implementierung des Harrisdetektors haben wir weitestgehend aus den Hausaufgaben übernommen und die Schnittstelle der Funktion ein wenig angepasst. Der Nutzer muss jetzt die Anzahl der Kacheln und nicht länger die Kachelgröße angeben.
+
+Zuletzt wird der Schwellwert für $H$ so gewählt, dass nur Ecken, nicht Kanten, als Merkmale erkannt werden. Als Schwellwert für $H$ haben wir empirisch $\tau = 0.01$ als geeignet bestimmt.
+
+Die Parameter haben wir so gewählt, dass möglichst keine Kanten als Merkmale erkannt werden ($\tau = 0.01$) und die Merkmale über das gesamte Bild verteilt sind (25 x 25 Kacheln und 2 Merkmale pro Kachel). Die Fenstergröße haben wir ebenfalls entsprechend der Empfehlung in \cite[S. 378]{Ma} auf 7 festgelegt.
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{Features_L1}
+	\caption{Erkannte Merkmale im Bild \textit{L1}.}
+	\label{fig:features_l1}
+\end{figure}
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{Features_R1}
+	\caption{Erkannte Merkmale im Bild \textit{R1}.}
+	\label{fig:features_r1}
+\end{figure}
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{Features_L2}
+	\caption{Erkannte Merkmale im Bild \textit{L2}.}
+	\label{fig:features_l2}
+\end{figure}
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{Features_R2}
+	\caption{Erkannte Merkmale im Bild \textit{R2}.}
+	\label{fig:features_r2}
+\end{figure}
+
+Die Abbildungen~\ref{fig:features_l1} und~\ref{fig:features_r1} zeigen die Merkmale, die im ersten Bildpaar erkannt wurden. Die Merkmale sind über den gesamten Vordergrund verteilt und es gibt nur wenige schlechte Merkmale im Bereich des Tisches und der Wand.
+
+Die Abbildungen~\ref{fig:features_l2} und~\ref{fig:features_r2} zeigen die Merkmale, die im zweiten Bildpaar erkannt wurden. Hier werden ausschließlich Merkmale im Vordergrund erkannt, wobei auf dem Buch auf der linken Seite, anders als oben, keine Merkmale erkannt werden. Das liegt hauptsächlich daran, dass durch den großen Unterschied im Abstand der Kamera zur Szene, die Fenstergröße für den Harrisdetektor anders gewählt werden müsste, da viele Merkmale aus dem ersten Bildpaar nun deutlich mehr Pixel einnehmen und das Fenster diese somit nicht mehr umfassen kann.
+
+Alternativ haben wir uns noch mit dem in \cite[S. 9]{Riegler} beschriebenen \textit{Good"=Features"=To"=Track"=Detektor (GFTT)} beschäftigt, der eine abgewandelte Form des Harrisdetektors darstellt. GFTT lieferte für unseren Fall bei deutlich größerer Laufzeit, da für jedes Pixel explizit die Eigenwertzerlegung der Harrismatrix angewandt werden muss, keine besseren Ergebnisse.
+
+\subsection{Extraktion von Markmalsdeskriptoren}
+Als Merkmalsdeskriptor haben wir zuerst die aus der Vorlesung und den Hausaufgaben bekannte Fensterung der Intensitätswerte um das Merkmal ausprobiert. Die so erhaltenen Deskriptoren waren sich an vielen Stellen zu ähnlich und die daraus bestimmten Korrespondenzen hatten viele falsche Zuordnungen.
+
+Wir haben den Deskriptor dann so angepasst, dass der Bildausschnitt so rotiert wird, dass der Hauptgradient in Richtung der positiven x-Achse zeigt. Den Hauptgradienten kann man aus dem zum größeren Eigenwert gehörigen Eigenvektor der Harrismatrix bestimmen. Für die Rotation der Ausschnitte haben wir eine Funktion programmiert, die eine entsprechende Homographie per Rückwärtstransformation auf den Bildausschnitt anwendet. Damit keine leeren Flecken entstehen, wird der Bildausschnitt zuerst größer als erforderlich gewählt und nach der Rotation auf die benötigte Größe beschnitten. Auch dieser Deskriptor zeigte zu große Ähnlichkeit zwischen den Merkmalen.
+
+Nach weiterer Recherche sind wir auf den von Lowe eingeführten \textit{Scale"=Invariant"=Feature"=Transform"=Deskriptor (SIFT)} gestoßen, der in der von uns untersuchten Literatur, wegen seiner Leistungsfähigkeit, oft als Referenz für neue Verfahren herangezogen wird \cite{Hast} \cite{Lowe} \cite{Rao}. Dieser zeigte deutlich bessere Ergebnisse bei der Zuordnung, da er die Merkmale einzigartiger darstellen kann und das bei gleichzeitig geringerer Dimension (128 gegenüber z.~B. 289 bei einem 17 x 17 Fenster) des Deskriptors.
+
+Für den SIFT"=Deskriptor werden die Gradienten in einem 16 x 16 Fenster um den Merkmalspunkt extrahiert, um den Hauptgradienten rotiert und in 4 x 4 Subfenstern in den 8 Hauptrichtungen im Sinne eines Histogramms zusammengefasst. Da sich die Gradienten oft auch in größerem Abstand um den Merkmalspunkt ähnlich verhalten, ist der Deskriptor besonders robust gegenüber Änderungen der Skalierung der Ansicht und durch Rotation entsprechend des Hauptgradienten auch invariant gegenüber Rotation der Ansicht.
+
+\subsection{Zuordnung von Korrespondenzpaaren}
+Für die Zuordnung von Korrespondenzpaaren verwenden wir die aus der Vorlesung bekannte \textit{Normalised"=Cross"=Correlation (NCC)}. Dieses Verfahren ist zwar eigentlich für die Anwendung auf Bildausschnitten definiert, eignet sich aber auch für die Zuordnung anderer Deskriptoren.
+
+Den Schwellwert für die minimale Korrelation haben wir empirisch so angepasst, dass das Verhältnis zwischen korrekten und falschen Zuordnungen, bei gleichzeitig vernünftiger Anzahl von Zuordnungen, maximiert wurde. Es ergab sich ein Schwellwert $\tau = 0.65$.
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{NCC1}
+	\caption{Per NCC zugeordnete Merkmale im ersten Bildpaar (\textit{L1 und R1}).}
+	\label{fig:ncc1}
+\end{figure}
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{NCC2}
+	\caption{Per NCC zugeordnete Merkmale im zweiten Bildpaar (\textit{L2 und R2}).}
+	\label{fig:ncc2}
+\end{figure}
+
+Die Abbildungen~\ref{fig:ncc1} und~\ref{fig:ncc2} zeigen die Zuordnung der Merkmale in den beiden Bildpaaren. Die Bilder werden jeweils in roter (linkes Bild) und grüner (rechtes Bild) Tönung überlagert, die Merkmale in der entsprechenden Farbe markiert und mit einer Linie verbunden.
+
+Im Vergleich zu den benachbarten Merkmalen relativ kurze Verbindungslinien und deutlich andere Winkel der Verbindungslinie, weisen auf eine falsche Zuordnung hin. Im ersten Bildpaar finden sich auf diese Weise zwei falsche Zuordnungen, erstens auf dem Buch und zweitens an der Wand.
+
+Im zweiten Bildpaar gibt es am Audiointerface, der Tasse und dem Lötkolben falsche Zuordnungen. Der Anteil an falschen Zuordnungen ist jedoch in beiden Bildern gering. Durch Erhöhung des Schwellwerts für die Korrelation würden zunächst primär richtige Zuordnungen eliminiert, daher entschieden wir uns dafür, die Einstellung so zu belassen.
+
+\subsection{Reduktion von Ausreißern mit RanSaC}
+\label{ssec:ransac}
+Da Ausreißer bei der Bestimmung der essenziellen Matrix leicht zu falschen Ergebnissen führen, verwenden wir die in der Vorlesung und den Hausaufgaben eingeführte \textit{Random"=Sample"=Consensus"=Methode (RanSaC)}.
+
+Aus der Menge der bestimmten Korrespondenzen werden zufällig 8 ausgewählt und mit dem Achtpunktalgorithmus aus diesen eine Fundamentalmatrix $F$ bestimmt. Wir verwenden an dieser Stelle eine leicht angepasste Version des Achtpunktalgorithmus, die die in \cite[S. 393]{Ma} beschriebene nichtlineare Verfeinerung nutzt. Mithilfe der aus der Vorlesung bekannten \textit{Sampsondistanz}, einer vereinfachten Variante des Rückprojektionsfehlers, werden dann alle Korrespondenzen mit $F$ verglichen. Alle Paare, die eine Sampsondistanz von 0.1 Pixeln oder weniger aufweisen, werden als zu $F$ passend eingeschätzt und als Consensusset aufgefasst. Das größte, über alle RanSaC"=Iterationen gefundene Consensusset, wird am Ende als gültig akzeptiert und im weiteren Verlauf verwendet. Die Anzahl der Iterationen im Verhältnis zur Menge an Korrespondenzpaaren ist entscheidend. Wir haben uns dazu entschieden pro Korrespondenzpaar 10~Iterationen, mindestens jedoch 150~Iterationen durchzuführen. Das Führt meistens zu einem guten Ergebnis. Letztlich muss man akzeptieren, dass es sich um eine statistische Methode handelt, die das gesamte Verfahren nicht deterministisch macht. Die Qualität der Korrespondenzen kann daher von Durchlauf zu Durchlauf variieren.
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{ransac1}
+	\caption{Per RanSaC bestimmte, robuste Korrespondenzen im ersten Bildpaar (\textit{L1 und R1}).}
+	\label{fig:ransac1}
+\end{figure}
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{ransac2}
+	\caption{Per RanSaC bestimmte, robuste Korrespondenzen im zweiten Bildpaar (\textit{L2 und R2}).}
+	\label{fig:ransac2}
+\end{figure}
+
+Die Abbildungen~\ref{fig:ransac1} und~\ref{fig:ransac2} zeigen die Zuordnung nach Anwendung der RanSaC"=Methode. Mit Ausnahme der Zuordnung an der Wand im ersten Bildpaar, gibt es keine falschen Zuordnungen mehr. Andererseits wurden auch viele der richtigen Zuordnungen als unzureichend eingestuft. Das führt insbesondere für das zweite Bildpaar dazu, dass die Korrespondenzen nicht mehr gleichmäßig über das Bild verteilt sind, was für den Achtpunktalgorithmus durchaus ein Problem darstellen kann.
+
+Wie gut die Korrespondenzen schlussendlich wirklich sind, zeigt die Visualisierung der Epipolarlinien, die mit der Fundamentalmatrix bestimmt werden können.
+
+\begin{figure}[!p]
+	\centering
+	\includegraphics[scale=0.45, angle=90]{epipolar_R1}
+	\caption{Merkmale in \textit{L1} und zugehörige Epipolarlinien in \textit{R1}.}
+	\label{fig:epipolar_r1}
+\end{figure}
+
+\begin{figure}[!p]
+	\centering
+	\includegraphics[scale=0.45, angle=90]{epipolar_L1}
+	\caption{Merkmale in \textit{R1} und zugehörige Epipolarlinien in \textit{L1}.}
+	\label{fig:epipolar_l1}
+\end{figure}
+
+\begin{figure}[!p]
+	\centering
+	\includegraphics[scale=0.45, angle=90]{epipolar_R2}
+	\caption{Merkmale in \textit{L2} und zugehörige Epipolarlinien in \textit{R2}.}
+	\label{fig:epipolar_r2}
+\end{figure}
+
+\begin{figure}[!p]
+	\centering
+	\includegraphics[scale=0.45, angle=90]{epipolar_L2}
+	\caption{Merkmale in \textit{R2} und zugehörige Epipolarlinien in \textit{L2}.}
+	\label{fig:epipolar_l2}
+\end{figure}
+
+Die Abbildungen~\ref{fig:epipolar_r1} bis~\ref{fig:epipolar_l2} zeigen die Epipolarlinien für zufällig ausgewählte Merkmale. Die Epipolarlinien wurden jeweils mit der aus den robusten Korrespondenzen geschätzten Fundamentalmatrix des Bildpaars bestimmt. Die Formel für die Berechnung der Epipolarlinien wurde \cite{Fusiello} entnommen.
+
+In allen gezeigten Fällen verlaufen die Epipolarlinien sehr nah zu den korrespondierenden Merkmalen. Eine deutliche Abweichung würde bedeuten, dass die bestimmten Korrespondenzen geringe Qualität haben und nicht für die weitere Verarbeitung geeignet sind.
+
+\subsection{Bestimmung der essenziellen Matrix}
+Aus den robusten Korrespondenzen wird mit dem Achtpunktalgorithmus und der in Abschnitt~\ref{sec:kalibrierung} bestimmten Kamera"=Parametermatrix $K$ eine essenzielle Matrix $E$ für das Bildpaar bestimmt. Es handelt sich um den gleichen Achtpunktalgorithmus wie in Abschnitt~\ref{ssec:ransac}. Die Unterschiede belaufen sich darauf, dass mit kalibrierten Koordinaten gearbeitet wird. Für die nichtlineare Verfeinerung kommt eine leicht abgeänderte Variante der Sampsondistanz zum Einsatz in der alle Ausdrücke mit $x_i'$ mit
+\begin{equation}
+	x_i' = K \cdot x_i
+\end{equation}
+ersetzt wurden.
+
+Wir wollten zuerst den in \cite[S. 167]{Ma} beschriebenen, deutlich fortgeschritteneren Ansatz zur Verfeinerung von $E$ verwenden, der direkt auf $R$ und $T$ --- für die wir vorher mit dem in Abschnitt~\ref{ssec:r_und_t} beschriebenen Verfahren Initialisierungen bestimmt hätten --- operiert. Das war uns mit der für uns schwer verständlichen Erklärung jedoch leider nicht möglich und andere der konsultierten Quellen beschäftigen sich nicht so tief mit dem Achtpunktalgorithmus und der Bestimmung der extrinsischen Kameraparameter.
+
+Warum wir überhaupt probiert haben solche Verfahren anzuwenden, wird in Abschnitt~\ref{ssec:rektifizierung} beschrieben.
+
+\subsection{R und T bestimmen}
+\label{ssec:r_und_t}
+Aus der essenziellen Matrix haben wir dann mit dem aus der Vorlesung und den Hausaufgaben bekannten Algorithmus $R$ und $T$ bestimmt.
+
+Es werden die 4 geometrisch möglichen Kombinationen berechnet und mithilfe der Bedingung, dass die 3D"=Rekonstruktion der Korrespondenzpunkte positive Tiefen haben müssen, die passendste Kombination --- also die, die die Bedingung am besten erfüllt --- von $R$ und $T$ gewählt.

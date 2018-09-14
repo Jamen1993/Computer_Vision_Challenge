@@ -1,0 +1,43 @@
+% Simple Sectioned Essay Template
+% LaTeX Template
+% This template has been downloaded from:
+% http://www.latextemplates.com
+
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[ngerman]{babel}
+\usepackage[utf8]{inputenc}
+
+\usepackage{amsmath}
+\numberwithin{equation}{section}
+
+\usepackage{graphicx}
+\DeclareGraphicsExtensions{.pdf, .png, .jpg}
+\graphicspath{ {images/} } % Specifies the directory where pictures are stored
+
+\usepackage[style=numeric]{biblatex}
+\bibliography{src/literatur}
+
+\begin{document}
+	\input{src/Titelseite}
+	\clearpage
+
+	\tableofcontents
+	\clearpage
+
+	\input{src/Einleitung}
+	\clearpage
+	\input{src/Kalibrierung}
+	\clearpage
+	\input{src/Korrespondenzpunkte}
+	\clearpage
+	\input{src/Stereomatching}
+	\clearpage
+	\input{src/Virtuelle_Ansicht}
+	\clearpage
+	\input{src/Ergebnisse}
+	\clearpage
+
+	\nocite{*}
+	\printbibliography
+\end{document}

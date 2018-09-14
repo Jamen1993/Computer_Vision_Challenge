@@ -1,0 +1,87 @@
+\section{Kalibrierung}
+\label{sec:kalibrierung}
+
+Eine Kamera bildet dreidimensionale Raumpunkte auf zweidimensionale Punkte in der Bildebene ab. Der Zusammenhang zwischen Pixelkoordinaten und Raumpunkten wird beschrieben durch die perspektivische Projektion
+
+\begin{equation}
+  \label{eq:pixelkorrdinaten_projektion}
+\mathbf{x'} \sim K_s \cdot K_f \cdot \Pi_0 \cdot \begin{bmatrix} R & \mathbf{T} \\ 0 & 1 \end{bmatrix}, 
+\end{equation}
+
+wobei die spezifische Kameramatrix $K_s$ die sogenannten \textit{intrinsischen} Kameraparameter enthält
+
+\begin{equation}
+  \label{eq:specific_camera_matrix}
+K_s = \begin{bmatrix} s_x & s_\theta & o_x \\ 0 & s_y & o_y \\ 0 & 0 & 1  \end{bmatrix}
+\end{equation}
+
+und die Matrix $K_f$ die Brennweite der Kamera
+
+\begin{equation}
+  \label{eq:focal_length}
+K_f = \begin{bmatrix} f & 0 & 0 \\ 0 & f & 0 \\ 0 & 0 & 1  \end{bmatrix}.
+\end{equation}
+
+Fasst man die Matrizen $K_s$ und $K_f$ zusammen erhält man die Kameramtrix $K$:
+
+\begin{equation}
+  \label{eq:camera_matrix}
+K = K_s \cdot K_f =  \begin{bmatrix} f s_x & f s_\theta & o_x \\ 0 & f s_y & o_y \\ 0 & 0 & 1  \end{bmatrix}.
+\end{equation}
+
+Der Zusammenhang zwischen Pixel- $\mathbf{x'}$ und Bildkoordinaten $\mathbf{x}$ ist gegeben durch
+
+\begin{equation}
+  \label{eq:pixel_bildkoordianten}
+\mathbf{x} = K_s^{-1} \cdot \mathbf{x'}.
+\end{equation}
+
+Für den von uns konzipierten Programmablauf sind kalibrierte Bilder gleich an mehreren Stellen notwendig. Als erstes benötigen wir die Kameramatrix für die Bestimmung der essentiellen Matrix $E$ durch den Achtpunktalgorithmus und die anschließende Rektifizierung der Bilder. Außerdem für die Berechnung der Tiefenkarte aus der Disparity-Map und die Berechnung der virtuellen Ansicht.
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=1\textwidth]{cameraCalibration}
+	\caption{Kalibrierungstoolbox von Bouguet nach Extraktion der Ecken im Schachbrett.}
+	\label{fig:kalibrierungstoolbox}
+\end{figure}
+
+Die notwendigen Schritte zur Bestimmung der Kameramatrix können in Kapitel 4.3 des Vorlesungsskripts nachvollzogen werden. Im Allgemeinen sind mindestens drei Ansichten eines Objektes notwendig. In der Literatur hat sich die Verwendung von drei Aufnahmen eines Schachbrettes als Standard durchgesetzt, da sich die Kalibrierung dadurch besonders einfach darstellen lässt, wie in \cite[Kapitel 6.5.3]{Ma} beschrieben.
+
+Zur Durchführung der Kalibirierung haben wir die Matlab Kalibrierungstoolbox von Jean-Yves Bouguet \cite{Bouguet} verwendet. Beispielhaft ist die Verwendung der Toolbox in Abbildung~\ref{fig:kalibrierungstoolbox}.
+
+Für das erste Bildpaar (L1/R1) erhalten wir die in Tabelle \ref{tab:kalibrierungsergebnisse1} dargestellten Kalibrierungsergebnisse, in Tabelle \ref{tab:kalibrierungsergebnisse2} die Ergebnisse für das zweite Bildpaar.
+
+\begin{table}[htbp]
+\begin{center} 
+\begin{tabular}{c|c|c}
+Parameter & Value                                     & Uncertainty       \\ \hline
+$fc$      & $[3030.52; 3029.96]$                      & $[100.93; 98.08]$ \\ \hline
+$cc$      & $[1549.00; 1002.88]$ & $[45.47; 31.65]$ \\ \hline
+$alpha\_c$ & $0$                  & -                
+\end{tabular}
+\caption{Kalibrierungsergebnisse für Bildpaar 1} 
+\end{center}
+\label{tab:kalibrierungsergebnisse1} 
+\end{table}
+
+\begin{table}[htbp]
+\begin{center} 
+\begin{tabular}{c|c|c}
+Parameter & Value                                     & Uncertainty       \\ \hline
+$fc$      & $[4008.31; 4008.20]$                      & $[93.77; 92.03]$ \\ \hline
+$cc$      & $[1571.91; 1035.82]$ & $[41.15; 35.53]$ \\ \hline
+$alpha\_c$ & $0$                  & -                
+\end{tabular}
+\caption{Kalibrierungsergebnisse für Bildpaar 2} 
+\end{center}
+\label{tab:kalibrierungsergebnisse2} 
+\end{table}
+
+Die Toolbox berechnet automatisch die Unsicherheit der berechneten Parameter, welche in unserem Fall in einem Bereich von $2~..~3~\%$ liegt. Dies ist die minimale Unsicherheit, welche wir nach mehreren Kalibrierungen erreichen konnten.
+
+Die von Bouguet berechneten Parameter lassen sich wie folgt in eine Kalibrierungsmatrix $K$ umschreiben
+
+\begin{equation}
+  \label{eq:umformung_kameramatrix}
+K = \begin{bmatrix} fc(1) & alpha\_c \cdot fc(1) & cc(1) \\ 0 & fc(2) & cc(2) \\ 0 & 0 & 1  \end{bmatrix}.
+\end{equation}

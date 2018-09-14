@@ -1,0 +1,96 @@
+\section{Stereomatching}
+Im folgenden wird ein Überblick über das Thema Stereomatching gegeben. 
+Ziel ist es dem Anwender die Notwendigkeit des Stereomatchings bezüglich der Aufgabenstellung zu vermitteln. Zudem werden die Voraussetzungen sowie Informationen zur Implementierung und Ausführung speziell für die gegebene \textit{Computer Vision Challenge} aufgezeigt.
+
+\subsection{Rektifizierung}
+\label{ssec:rektifizierung}
+Damit Stereomatching mit vernünftiger Performance und Laufzeit durchgeführt werden kann, ist die Rektifizierung der verwendeten Bilder quasi Pflicht.
+
+Ziel der Rektifizierung ist die Epipolarlinien je Bild parallel zur Verschiebungslinie und kollinear zueinander auszurichten. Der Korrespondenzpunkt zu einem beliebigen Pixel aus Bild 1, findet sich in Bild 2 also irgendwo in der gleichen Zeile (in Pixelkoordinaten). Damit wird die Suche nach korrespondierenden Punkten von einer zweidimensionalen Suche entlang der Epipolarlinie zu einer eindimensionalen Suche entlang derselben Zeile reduziert. Das ermöglicht andere Suchverfahren, die die Laufzeit deutlich reduzieren können.
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.9\linewidth]{rektifizierung}
+	\caption{Schematische Darstellung der Derektifizierung \cite[S. 39]{Morvan}.}
+	\label{fig:rektifizierung}
+\end{figure}
+
+Abbildung~\ref{fig:rektifizierung} zeigt die Idee hinter der Rektifizierung. Die beiden Kameras werden so rotiert, dass die Bildebenen parallel zur Verschiebungslinie stehen. Dadurch wird eine gemeinsame Bildebene $I'$ geformt.
+
+Die Rektifizierung entspricht einer Homographietransformation
+\begin{equation}
+	x_i' = \underbrace{K' \cdot R' \cdot R_i^{-1} \cdot K_i^{-1}}_{H_i} \cdot x_i,
+\end{equation}
+wobei $x'$ den Bildpunkt nach der Rektifizierung beschreibt. Durch geschickte Wahl des Weltkoordinatensystems, kann die Transformation vereinfacht werden. Es wird angenommen, dass Kamera 1 im Ursprung liegt und keine Rotation bezüglich des Weltkoordinatensystems aufweist. Dadurch vereinfachen sich die Transformationen zu
+\begin{align}
+	x_1' &= \underbrace{K' \cdot R' \cdot K_1^{-1}}_{H_1} \cdot x_1\\
+	x_2' &= \underbrace{K' \cdot R' \cdot R^{-1} \cdot K_2^{-1}}_{H_2} \cdot x_2.
+\end{align}
+
+Als erstes wird Kamera 2 durch Anwendung der zu $R$ inversen Transformation so ausgerichtet, dass beide Kameras die gleiche Orientierung in Bezug auf das Weltkoordinatensystem einnehmen. Die Anwendung der Rotation
+\begin{align}
+	R' &= \begin{bmatrix}
+		\vec{r_x} & \vec{r_y} & \vec{r_z}	
+	\end{bmatrix}^T\\
+	\vec{r_x} &= -\vec{T}\\
+	\vec{r_y} &= \vec{e_z} \times \vec{r_x}\\
+	\vec{r_z} &= \vec{r_x} \times \vec{r_y}
+\end{align}
+dreht dann beide Kameras so, dass die x-Achsen der Bildebenen parallel zur Verschiebungslinie von $C_1$ zu $C_2$ und damit ebenfalls kollinear ausgerichtet sind \cite[S. 40]{Morvan}.
+
+Die Transformation erfolgt in Bildkoordinaten, daher müssen die Pixelkoordinaten mit $K$ in Bildkoordinaten umgewandelt werden. Nach der Transformationen werden die transformierten Bildkoordinaten mit $K'$ wieder in Pixelkoordinaten umgewandelt. Üblicherweise wird $K' = K$ gewählt.
+
+Die Anwendung der Homographietransformation auf die Graustufenbilder erfolgt in unserer Implementierung per Rückwärtstransformation mit Intensitäts"=Lookup und bilinearer Interpolation. Vorher wurden die 4 Eckpunkte der Bildebenen per Vorwärtstransformation berechnet und die Größe der rektifizierten Bilder auf Basis des größeren Bildes festgelegt.
+
+Leider erreichten unsere rektifizierten Bilder keine besonders gute Qualität. Die vertikale Abweichung korrespondierender Punkte betrug meist einige 10 Pixel. Auch die von Fusiello et al. zur Verfügung gestellte Implementierung einer Rektifizierung, führte nicht zu besseren Ergebnissen. Wir vermuten daher, dass unsere Korrespondenzpunkte nicht gut genug sind, um $R$ und $T$ aus der essenziellen Matrix mit ausreichender Richtigkeit zu extrahieren. Leider waren wir nicht in der Lage Parameter für die in Abschnitt~\ref{sec:korrespondenzpunkte} beschriebenen Verfahren zu finden, die die Qualität der Rektifizierung verbessern. Stattdessen optimieren wir die 3 Rotationswinkel von $R'$, um den mittleren quadratischen Fehler zwischen den y-Koordinaten der gefundenen Korrespondenzpunkte in beiden Bildern zu minimieren. Das entsprach zwar nicht mehr dem eigentlich Gedanken hinter der Rektifizierung, führte aber zu deutlich geringeren vertikalen Abweichungen in weiten Bereichen um die Korrespondenzpunkte.
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\linewidth]{rektifiziert_1}
+	\caption{Rektifizierung des ersten Bildpaars.}
+	\label{fig:rektifizierung_1}
+\end{figure}
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\linewidth]{rektifiziert_2}
+	\caption{Rektifizierung des zweiten Bildpaars.}
+	\label{fig:rektifizierung_2}
+\end{figure}
+
+Die Abbildungen~\ref{fig:rektifizierung_1} und~\ref{fig:rektifizierung_2} zeigen die Ergebnisse der Rektifizierung für beide Bildpaare.
+
+Die rektifizierten Bilder werden anschließend auf $10 \%$ der ursprünglichen Größe skaliert, um die Laufzeit des Stereomatching in einen vernünftigen Rahmen zu kriegen.
+
+\subsection{Blockmatching}
+Durch die vorangegangenen Arbeitspakete stehen als Ausgangspunkt zwei rektifizierte Graustufenbilder zur Verfügung. Ein wichtiger Zwischenschritt für die Lösung der Aufgabenstellung ist die Erstellung einer Disparity Map. Dies liegt darin begründet, da mithilfe der dieser Map fortfolgend eine Tiefenkarte geschätzt werden kann, welche für die Erstellung der virtuellen Ansicht essenziell ist.
+Unter der Disparity versteht man die Pixeldifferenz von zwei identischen Objekten in zwei unterschiedlichen Bildern. Diese entsteht, wenn zwei Bilder aus unterschiedlichen Kamerapositionen aufgenommen werden.
+Um die Laufzeit des Stereomatchings zu minimieren wurde im ersten Schritt die Größe der Ausgangsbilder stark reduziert.
+Der Standardalgorithmus zur Erstellung einer Disparity Map ist der Block Matching Algorithmus.
+Diesem wird das linke und rechte rektifizierte Bild übergeben. Ein Bild wird als Referenz gewählt. Anschließend wird für jedes Pixel im Referenzbild ein Pixelfenster mit bestimmter Größe definiert. Im anderen Bild wird entlang der gleichen Zeile ein Block gesucht, welcher die größte Ähnlichkeit mit dem gewählten Block aus dem Referenzbild aufweist. Das Suchen in der gleichen Zeile ist aufgrund der vorangegangenen Rektifizierung möglich, was einen positiven Beitrag zur Laufzeit hat.
+
+Für das Matching der Pixelblöcke ist die Definition eines Kriteriums zur Bestimmung der Ähnlichkeit notwendig.
+Hierfür kann beispielsweise die \textit{Sum of Absolute Differences} verwendet werden. Die Graustufenwerte von jedem Block werden summiert und anschließend die Werte der unterschiedlichen Blöcke subtrahiert. Der Block mit der geringsten Abweichung sowie der geringsten Entfernung zum Ursprungspixel wird ausgewählt. Die Pixelentfernung der beiden zusammengehörigen Blöcke entspricht der Disparity. Der Algorithmus liefert als Ergebnis eine Matrix mit identischer Größe der Eingangsbilder.
+Diese und wertvolle weitere Informationen können diesbezüglich in \textit{Morvan - chapter 3} \cite{Morvan} recherchiert werden.
+
+Als Grundlage für die Implementierung des Stereomatchings wurde eine Applikation von Chris McCormick verwendet \cite{McCormick}. Um zusätzlich die Laufzeit positiv zu beeinflussen, wurden Modifikationen vorgenommen.
+Es wird beispielsweise nicht für jedes Pixel die Disparity direkt berechnet, sondern Pixel zeilen- und spaltenweise übersprungen und nachfolgend eine Interpolation durchgeführt.
+Der Block Matching Algorithmus wird jeweils für das links- und rechtsseitige Bild ausgeführt.
+Parameter, welche starken Einfluss auf die Disparity Map haben, sind die Blockgröße sowie der Suchbereich in Pixel. 
+Nähere Informationen zu den Parametern liefern die Kommentare in dem Matlab-File \textit{\grqq disp\_block.m\grqq} in dem Bibliotheksverzeichnis (lib).
+Als Ergebnis erhält man zwei Disparity Maps.
+
+Abbildung~\ref{fig:disparity_R1} zeigt die Disparity Map für das Beispielbild R1. Es ist festzustellen, dass Fehlzuweisungen bei homogenen Flächen auftreten. Die Disparitywerte bei Bereichen mit mehr Struktur sind jedoch akzeptabel.
+Es ist zu erwähnen, dass neben dem lokalen Block Matching Algorithmus auch globale Algorithmen existieren. Hierbei erfolgt die Bestimmung der Disparity durch Optimierung einer Energiefunktion. Die Implementierung dieser Methode stellt im Vergleich zum Block Matching Algorithmus jedoch eine deutlich höhere Komplexität dar.
+
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[width=\linewidth]{disparity_R1}
+	\caption{Disparity Map für Beispielbild R1}
+	\label{fig:disparity_R1}
+\end{figure}
+
+\subsection{Derektifizierung}
+Nach der Erstellung der Disparitymaps für beide Kameras, werden diese wieder auf Originalgröße skaliert und derektifiziert. Dazu kommen die gleichen Homographietransformationen wie in Abschnitt~\ref{ssec:rektifizierung} zum Einsatz. Die Derektifizierung ist als Vorwärtstransformation mit Disparity"=Lookup und bilinearer Interpolation implementiert.
+
+Aus den derektifizierten Disparitymaps werden anschließend die Tiefenkarten für beide Kameras berechnet.

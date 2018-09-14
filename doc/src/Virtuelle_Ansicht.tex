@@ -1,0 +1,104 @@
+\section{Virtuelle Ansicht}
+% Alex
+% Methode nach Morvan erklären
+% Wie funktioniert das 3D-Warping
+% Wie werden R und T linear interpoliert, SLERP erklären
+% Wie werden defekte behoben
+
+Als einer der letzten Schritte wird die virtuelle Ansicht in der Funktion \mbox{\glqq multiimwarp.m\grqq{}} berechnet. Das Verfahren wird in Abschnitt \ref{Warp} beschrieben. In dieser Funktion wird zunächst auch die Aufteilung der euklidischen Transformation zwischen den gegebenen Bilder errechnet. Dies wird mit einem \glqq Spherical Linear Interpolation\grqq{} (SLERP) Algorithmus, wie in Abschnitt \ref{SLERP} beschrieben durchgeführt. In Abschnitt \ref{antiNan} wird abschließend beschrieben, wie mit nicht berechneten Pixeln verfahren wird.
+
+\subsection{Skalierung der Transformation und SLERP-Algorithmus}\label{SLERP} 
+
+Um eine euklidische Transformation, bestehend aus einer Translation $T$ und einer Rotation $\boldsymbol{R}$ zu skalieren, müssen unterschiedliche Verfahren angewendet werden. Außerdem werden für die folgenden Methoden die Transformationen $T$ und $\boldsymbol{R}$ von beiden Originalbildern zu der virtuellen Ansicht benötigt. Dies alles wird in der Funktion \glqq scaleM.m\grqq{} ausgeführt. Für den ersten translatorischen Anteil vom Ursprung aus wird der Verschiebungsvektor $T$ mit dem Skalierungsfaktor $f$ multipliziert, siehe \ref{eq:T1}. Der Verschiebungsvektor $T_2$ vom Zielpunkt aus zu der virtuellen Ansicht wird mit \ref{eq:T2} bestimmt. 
+
+\begin{equation}
+\label{eq:T1}
+T_1 = T f
+\end{equation}
+
+\begin{equation}
+\label{eq:T2}
+T_2 = -T+T_1
+\end{equation}
+
+Für die Aufteilung der Rotation $\boldsymbol{R}$ wird diese zunächst als Quaternion dargestellt. Sämtliche mathematische Operationen im Quaternionenraum sind in \cite{Dam} zusammengefasst. Durch einen SLERP-Algorithmus wird von der Nullrotation ausgehend der erste rotatorische Anteil $\boldsymbol{R}_1$ bestimmt. Um einen solchen Algorithmus anzuwenden, muss zunächst sichergestellt werden, dass die kleinere Winkelstrecke genommen wird. Dies wird erreicht indem ggf. das negative Quaternion, dass die selbe Rotation beschreibt, verwendet wird. Außerdem ist der SLERP-Algorithmus bei sehr kleinen Winkeln numerisch ungünstig, da eine Sinus-Funktion des Winkels im Nenner eines Bruchs benötigt wird. Deshalb wird bei kleinen Winkeln nur ein \glqq Linear Interpolation\grqq{} (LERP) Algorithmus \ref{eq:LERP_eqo}, mit anschließender Normierung des Quaternions benutzt. Die Formel zur Berechnung des SLERP-Algorithmus ist in \ref{eq:SLERP_eqo} angegeben. Dabei ist $\theta$ der Winkel zwischen den Orientierungen. 
+
+\begin{equation}
+\label{eq:LERP_eqo}
+\text{LERP: } q = q_1+f(q_2-q_1)
+\end{equation}
+
+\begin{equation}
+\label{eq:SLERP_eqo}
+\text{SLERP: } q = \frac{\sin((1-f)\theta)}{\sin(\theta)} \: q_1+\frac{\sin(f\theta)}{\sin(\theta)} \: q_2
+\end{equation}
+
+Um den Gegenanteil $\boldsymbol{R}_2$ der Rotation $\boldsymbol{R}_1$ zu erhalten, wird zunächst in die Gegenrichtung der Rotation $\boldsymbol{R}$ gedreht und anschließend um den Anteil $\boldsymbol{R}_1$ zurück. Abschließend werden beide Anteile aus dem Quaternionenraum wieder zurück zu Rotationsmatrizen konvertiert.
+
+\subsection{Image warping}
+\label{Warp}
+
+Der in dieser Arbeit benutzte Algorithmus für die Synthese der virtuellen Ansicht ist in \cite{Morvan} erklärt. Er gliedert sich in vier Schritte, deren Implementierung in den folgenden Abschnitten beschrieben wird. Grundsätzlich wird die Textur des virtuellen Bildes invers berechnet, jedoch wird zunächst für jedes ursprüngliche Bild eine 3D Rekonstruktion aus vorwärts errechneten Tiefenkarten erstellt.
+
+\paragraph{1. Berechnung der Tiefenkarten}
+
+Die Verschiebung der Tiefenkarten $\boldsymbol{D}$ an die Position der virtuellen Ansicht wird durch die Funktion \glqq imwarpforward.m\grqq{} ausgeführt. Dabei werden dieser Funktion als Eingangsdaten die Tiefenkarten $\boldsymbol{D}_1$ und $\boldsymbol{D}_2$ der realen Ansichten sowohl als Bilddaten als auch als Tiefenkarte übergeben. Außerdem wird die Transformation $\boldsymbol{R}$ bzw. $T$ und die Kalibrierungsmatrix $\boldsymbol{K}$ benötigt. Die Funktion berechnet für jedes Pixel $p_{alt}$ des alten Bildes mit \ref{eq:forwardwarp} die Position dieses Pixels $p_{neu}$ im neuen Bild. Diese Position muss mit ihrem $\lambda$ normiert und auf ganzzahlige Pixelkoordinaten gerundet werden. Dabei können Fehler und Risse im errechneten Bild entstehen, die im nächsten Schritt beseitigt werden.
+
+\begin{equation}
+\label{eq:forwardwarp}
+\lambda \: p_{neu}^{(hom)} = \boldsymbol{K} \boldsymbol{R} \: \boldsymbol{K}^{-1} \: \boldsymbol{D}(p_{alt}) \: p_{alt}^{hom} - \boldsymbol{K} \boldsymbol{R} \: T
+\end{equation}
+
+\paragraph{2. Fehlstellen beseitigen und Glättung}
+
+Da es sich bei den Tiefenkarten um Graustufenbilder handelt, können diese mit den mathematischen Operationen Dilatation und Erosion bearbeitet werden. Die Dilatation führt zu einer Erweiterung des Vordergrundes der Tiefenkarte und es werden auch schmale Risse gefüllt. Durch die anschließende Erosion wird die ursprüngliche Form fast wieder hergestellt, nur die Konturen werden geglättet. Dabei hat sich gezeigt, dass ein etwas größerer Radius für die Erosion gegenüber der Dilatation bessere Ergebnisse liefert.
+
+\paragraph{3. Berechnung der 3D Koordinaten}
+
+Im dritten Schritt wird dann aus den gewonnenen Tiefenkarten $\boldsymbol{D}_{V1}$ und $\boldsymbol{D}_{V2}$ eine 3D Rekonstruktion der Pixel des neuen Bildes erstellt. Dazu wird mit \ref{eq:lambda12} der $\lambda$-Wert zu der Pixelposition $p$ bestimmt und anschließend der 3D Punkt $P$ mit \ref{eq:3Dconst} berechnet.
+
+\begin{equation}
+\label{eq:lambda12}
+\lambda = \frac{\boldsymbol{D}_V(p)}{z_3} \text{ wobei } z = \boldsymbol{K}^{-1} \: p^{hom}
+\end{equation}
+
+\begin{equation}
+\label{eq:3Dconst}
+P = \lambda \: \boldsymbol{K}^{-1} \: p^{hom}
+\end{equation}
+
+\paragraph{4. Abbildung auf die Bildebenen und Bestimmen der Textur der virtuellen Ansicht}
+
+Im vierten Schritt werden dann die 3D Punkte $P$ auf die Pixelkoordinaten $p_{alt}$ der ursprünglichen Bilder mit \ref{eq:3Dconstback} abgebildet. Dabei muss wieder mit dem entsprechenden $\lambda$-Wert normiert und auf ganzzahlige Pixelkoordinaten gerundet werden.
+
+\begin{equation}
+\label{eq:3Dconstback}
+\lambda \: p_{alt}^{hom} = [\boldsymbol{K} | \boldsymbol{0}_3] \:  \boldsymbol{M} P^{hom} 
+\text{ mit } \boldsymbol{M} = 
+ \begin{bmatrix}
+\boldsymbol{R} & -\boldsymbol{R} \: T \\
+\boldsymbol{0}_3^T & 1 
+\end{bmatrix}
+\end{equation}
+
+Mit diesen Pixelkoordinaten $p_{alt}$ kann dann die Textur der virtuellen Ansicht bestimmt werden. Dabei wird, falls ein Texturwert aus beiden Bildern vorliegt, die Textur des Vordergrunds bevorzugt, da dieser den Hintergrund bei gedrehten Ansichten meist verdeckt. Falls auch der Tiefenwert gleich ist, wird der Mittelwert der Textur herangezogen, um glattere Übergänge zwischen den verschiedenen Bildbereichen zu erhalten. Falls in einem Bild ein Pixel nicht verfügbar ist, wird die Textur aus dem jeweils anderen Bild übernommen. Falls kein Bild eine Texturinformation für einen Bereich enthält, wird dies durch einen Nan-Wert für diese Pixel markiert. Dies ist ein Anzeichen für eine Verdeckung oder einen Fehler in den Tiefenkarten, wird aber in der nachfolgenden Funktion beseitigt. Da dabei auch eine Tiefenkarte eingebunden werden kann, wird bei der oben beschriebenen Auswahl der Textur auch nach dem gleichen Verfahren eine Tiefenkarte der virtuellen Ansicht erstellt.
+
+\subsection{Füllen von unbestimmten Pixeln}
+\label{antiNan}
+
+Die letzte Funktion \mbox{\glqq antiNan.m\grqq{}} sucht bisher nicht definierte Pixel in der virtuellen Ansicht und füllt diese mit benachbarten Hintergrundpixeln auf. Dieses Verfahren wird bei \cite{Zinger} beschrieben. Dazu werden zunächst für jedes fehlende Pixel die nächsten Nachbarpixel nach links, rechts, oben und unten bestimmt. Bei kleinen Fehlstellen im Bild wird nur nach der kleinsten Distanz zum Nachbarpixel ausgewertet, um auch Fehlstellen in reinen Vordergrundbereichen zu füllen. Falls die Abstände zu den Nachbarn größer sind, werden Hintergrundtexturen zum Füllen bevorzugt, da von einer Verdeckung des Bereichs in den realen Ansichten ausgegangen wird. Bei einer solchen Verdeckung ist meist der Hintergrund nicht sichtbar und bei einer Verschiebung der Ansicht wird dieser dann eigentlich freigelegt. Nach Ausführen dieser Funktion hat jedes Pixel einen Farbwert zugewiesen bekommen und somit ist die virtuelle Ansicht dann fertig.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

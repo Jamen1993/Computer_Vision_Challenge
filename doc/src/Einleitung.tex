@@ -1,0 +1,77 @@
+\section{Einleitung}
+
+\subsection{Aufgabenstellung}
+Die Computer Vision Challenge im Sommersemester 2018 besteht darin, aus einem Stereo"=Bildpaar eine dritte, virtuelle Ansicht zu generieren.
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.9\textwidth]{geometrieVirtuelleAnsicht}
+	\caption{Geometrische Zusammenhänge zwischen den beiden Bildern und einer virtuellen Ansicht.}
+	\label{fig:geometrie_virtuelle_ansicht}
+\end{figure}
+
+Abbildung~\ref{fig:geometrie_virtuelle_ansicht} zeigt schematisch die Aufgabenstellung. Die virtuelle Ansicht $I_v$ soll zwischen den beiden realen Ansichten $I_1$ und $I_2$ liegen und durch einen Faktor $p$, der die Pose der virtuellen Kamera linear zwischen den  Posen der realen Kameras --- beschrieben durch die relative Rotation $R$ und die relative Translation $T$ --- skaliert, frei wählbar sein.
+
+Die Anforderungen an das Programm sind:
+\begin{itemize}
+\item Das Programm soll in Matlab mit der Standardbibliothek, also keine Nutzung von MathWorks"=Toolboxen, erstellt werden und dabei mit der Version \textit{2017b} lauffähig sein.
+\item Die geforderte Funktion \textit{free\_viewpoint} erhält als Eingabeparameter zwei Farbbilder mit den gleichen Dimensionen. Das auszugebende Bild, das die virtuelle Ansicht enthält, soll die gleiche Anzahl an Zeilen und Spalten haben wie die Eingabebilder. Zudem erhält die Funktion einen Wert $p \in [0, 1]$, welcher die Pose der virtuellen Ansicht relativ zu den realen Ansichten beschreibt. Hat $p$ z.~B. den Wert $1$, so soll die virtuelle Kamera genau die Pose von Kamera 2 einnehmen, bei $p = 0$ befindet sich die virtuelle Kamera in der Pose von Kamera 1 und im restlichen Intervall proportional zu $p$ zwischen Kamera 1 und 2.
+\item Zu den Stereobildpaaren (L1, R1) und (L2, R2) sollen die virtuellen Ansichten für $p \in (0.20,~0.45,~0.7,~1)$ generiert und in die Abgabe eingefügt werden.
+\item Die generierte virtuelle Ansicht soll keine Löcher (nicht berechnete Pixel) enthalten.
+\item Zusatzpunkt: Optimierung des Codes bezüglich der Laufzeit.
+\item Zusatzpunkt: Bedienung des Programms durch eine graphische Benutzeroberfläche (GUI).
+\end{itemize}
+
+Die zur Lösung der Aufgabe verwendeten Algorithmen und Verfahren werden in den folgenden Abschnitten beschrieben.
+In den Abschnitten~\ref{subsec:vorgehensweise} und~\ref{subsec:ueberblick_verfahren} werden unsere Vorgehensweise und der prinzipielle Programmablauf im Überblick dargestellt, bevor in den nachfolgenden Abschnitten die einzelnen Schritte genauer erklärt werden.
+
+\subsection{Vorgehensweise}
+\label{subsec:vorgehensweise}
+Zur Erfüllung der Aufgabenstellung haben wir uns zuerst einen Überblick über die zur Verfügung gestellte Literatur verschafft.
+
+Insbesondere die beiden folgenden Quellen haben uns geholfen eine grobe Vorstellung des Prozesses zu gewinnen: Zinger et al. beschreiben in \cite{Zinger} alle notwendigen Schritte zur Synthese einer virtuellen Ansicht aus zwei verschiedenen Ansichten derselben Szenerie ab Verfügbarkeit von Tiefenkarten für beide Ansichten. Sun et al. gehen in \cite{Sun} auch auf die nötigen Schritte zur Erstellung von Tiefenkarten ein, die bei Zinger et al. nicht zur Sprache kommen. Hier fallen die Begriffe \textit{Rektifizierung} und \textit{Stereomatching}, die als wichtig für den Prozess beschrieben, aber nicht detailliert erklärt werden.
+
+Auf Basis dieser beiden Quellen haben wir uns einen groben Plan gemacht, welche Techniken für unsere Aufgabe wichtig sind, nämlich Rektifizierung, Stereomatching, Erstellung einer Tiefenkarte und Synthese einer virtuellen Ansicht. Nachdem wir diesen Plan festgelegt hatten, suchten wir nach Informationen, wie diese Verfahren funktionieren und implementiert werden können.
+
+Einen besonders wichtigen Beitrag dazu leistete die Doktorarbeit von Morvan \cite{Morvan}. Sie liefert einen umfangreichen Überblick über die Techniken zur Synthese von virtuellen Ansichten. Mit Ausnahme der Methoden zur Bestimmung von Punktkorrespondenzen, werden die für uns relevanten Verfahren, mit Angabe der zugehörigen Formeln und Erklärung in ausreichendem Umfang, gezeigt. Auch das von Ma et al. verfasste Buch \cite{Ma}, auf dem bereits der Kurs aufbaut, wurde als Quelle für Informationen herangezogen.
+
+\subsection{Überblick über das gewählte Verfahren}
+\label{subsec:ueberblick_verfahren}
+\begin{figure}[!hp]
+	\centering
+	\includegraphics[scale=0.65]{Free_Viewpoint_Sequence}
+	\caption{Ablaufdiagramm des gesamten Verfahrens zur Synthese der virtuellen Ansicht.}
+	\label{fig:Ablaufdiagramm}
+\end{figure}
+
+Abbildung \ref{fig:Ablaufdiagramm} zeigt den Ablauf des von uns gewählten Verfahrens zur Synthese der virtuellen Ansicht.
+
+Als erstes werden die beiden gegebenen Ansichten in \textit{Graustufenbilder} umgewandelt, weil sich die folgenden Verfahren in der aktuellen Implementierung ausschließlich mit der Helligkeit und nicht den Farbinformationen in den Bildern befassen.
+
+Als nächstes wird der \textit{Harris"=Featuredetector} auf die Graustufenbilder angewandt und findet in beiden Bildern Ecken, die sich als Merkmale für globale Korrespondenzsuche eignen. Es handelt sich hierbei weitestgehend um die Implementierung aus den Hausaufgaben und es wurden lediglich geringe Modifikationen vorgenommen.
+
+Für die so erkannten Merkmale wird ein \textit{SIFT"=Deskriptor} extrahiert, der das Merkmal möglichst einzigartig beschreibt und dabei robust gegenüber Änderungen der Kamera"=Pose ist.
+
+Die Deskriptoren beider Ansichten werden danach mit der \textit{Normalised Cross Correlation (NCC)} verglichen und Merkmale mit großer Ähnlichkeit als Korrespondenzpunkte zugeordnet. Hierbei handelt es sich ebenfalls um die Implementierung aus den Hausaufgaben.
+
+Die Parameter für Harrisdetektor und NCC sollten eine gewisse Allgemeingültigkeit haben sollen, damit man sie auch auf andere Bilder anwenden kann. Sie können also nicht perfekt auf beide Bildpaare abgestimmt werden und daher werden sich unter den, im vorigen Schritt zugeordneten Merkmalen, falsche Zuordnungen (Ausreißer) befinden. Mit der Anwendung einer \textit{Random"=Sample"=Consensus"=Methode (RanSaC)} wird eine Untermenge der gefundenen Korrespondenzen ausgesucht, die bezüglich der \textit{Sampsondistanz} besonders gute Eigenschaften aufweist. Diese Funktion wurde nahezu unverändert aus den Hausaufgaben übernommen.
+
+Aus der so ausgewählten Untermenge wird mithilfe des \textit{Achtpunktalgorithmus} eine \textit{essenzielle Matrix} bestimmt, die die Epipolargeometrie der beiden Kameras beschreibt. Hierfür werden die \textit{intrinsischen Kameraparameter} für beide Ansichten benötigt, die im Vorhinein bestimmt wurden. Die Implementierung des Achtpunktalgorithmus wurde entsprechend den in \cite{Ma} beschriebenen Methoden teils stark angepasst. Die Basis lieferte die Implementierung aus den Hausaufgaben.
+
+Aus der geschätzten essenziellen Matrix werden anschließend die \textit{extrinsischen Kameraparameter}, die relative Rotation $R$ und die relative Translation $T$ bestimmt. Hierfür wurde die Implementierung aus den Hausaufgaben übernommen.
+
+Mithilfe der extrinsischen Kameraparameter wird eine \textit{epipolare Rektifizierung} der Graustufenbilder vorgenommen. Ziel der Rektifizierung ist es, die Suche nach Korrespondenzen für jedes einzelne Pixel eines Bildes zu vereinfachen, indem korrespondierende Pixel durch die angewandte Transformation auf dieselbe Zeile abgebildet werden.
+
+Die für die Bearbeitung der Aufgabe gegebenen Bilder sind relativ groß und würden für den folgenden Schritt zu einer unverhältnismäßig langen Laufzeit führen, daher werden die rektifizierten Bilder in ihrer Größe \textit{Runterskaliert}.
+
+Für die skalierten, rektifizierten Graustufenbilder wird dann mittels \textit{Stereomatching} jeweils eine \textit{Disparitymap} erstellt.
+
+Die beiden Disparitymaps werden wieder \textit{Hochskaliert}, damit für die folgenden Schritte die volle Auflösung zur Verfügung steht.
+
+Anschließend werden die hochskalierten Disparitymaps wieder \textit{Derektifiziert}. Damit ist der Bezug zu den ursprünglichen Ansichten wieder hergestellt.
+
+Die so gewonnenen Disparitymaps enthalten zwar indirekt die Tiefeninformation für jedes Pixel, diese muss aber zuerst noch mit der Pixeldichte des Bildsensors und der Brennweite der Linse in Verbindung gebracht werden, um für beide Ansichten eine \textit{Tiefenkarte} zu erhalten.
+
+Die Tiefenkarten sind zusammen mit den Ansichten die Eingangsdaten für die von Zinger et al. und Morvan beschriebenen Verfahren. Zuvor muss allerdings noch die relative Pose der virtuellen Kamera festgelegt werden. Dafür sollen $R$ und $T$ linear skaliert werden können. Wir verwenden den in der Computergrafik weit verbreiteten \textit{SLERP"=Algorithmus (Spherical Linear Interpolation)} für die Skalierung von $R$.
+
+Zuletzt werden die Ansichten, die Tiefenkarten und die Pose der virtuellen Kamera mit dem Verfahren nach Morvan zu einer \textit{virtuellen Ansicht} zusammengefügt.
